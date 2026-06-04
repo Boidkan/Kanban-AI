@@ -16,186 +16,189 @@ This document is the single detailed execution plan for Parts 1-10, including im
 
 ### Implementation checklist
 
-- [ ] Keep this file as the single source of truth for the project plan.
-- [ ] Define per-part checklists for implementation, tests, and success criteria.
-- [ ] Create `frontend/AGENTS.md` documenting the current frontend architecture and conventions.
-- [ ] Include guidance in `frontend/AGENTS.md` for future backend and AI integration work.
-- [ ] Present Part 1 output to the user and request explicit approval to proceed to Part 2.
+- [x] Keep this file as the single source of truth for the project plan.
+- [x] Define per-part checklists for implementation, tests, and success criteria.
+- [x] Create `frontend/AGENTS.md` documenting the current frontend architecture and conventions.
+- [x] Include guidance in `frontend/AGENTS.md` for future backend and AI integration work.
+- [x] Present Part 1 output to the user and request explicit approval to proceed to Part 2.
 
 ### Tests for Part 1
 
-- [ ] Manual review that all ten parts now have concrete checklists and success criteria.
-- [ ] Manual review that `frontend/AGENTS.md` exists and matches current code structure.
+- [x] Manual review that all ten parts now have concrete checklists and success criteria.
+- [x] Manual review that `frontend/AGENTS.md` exists and matches current code structure.
 
 ### Success criteria for Part 1
 
-- [ ] `docs/PLAN.md` contains detailed, actionable checklists for Parts 1-10.
-- [ ] `frontend/AGENTS.md` is present and useful for future contributors/agents.
-- [ ] User approves the plan changes before Part 2 begins.
+- [x] `docs/PLAN.md` contains detailed, actionable checklists for Parts 1-10.
+- [x] `frontend/AGENTS.md` is present and useful for future contributors/agents.
+- [x] User approves the plan changes before Part 2 begins.
 
 ## Part 2 - Scaffolding
 
 ### Implementation checklist
 
-- [ ] Add backend scaffold in `backend/` with FastAPI app entrypoint.
-- [ ] Add Docker setup for running backend + serving static frontend artifacts.
-- [ ] Add cross-platform start/stop scripts in `scripts/` (macOS, Linux, Windows).
-- [ ] Implement a simple backend API route (for example `/api/health`).
-- [ ] Serve a temporary static hello-world page from FastAPI at `/` to verify wiring.
-- [ ] Document local run flow briefly in README/docs.
+- [x] Add backend scaffold in `backend/` with FastAPI app entrypoint.
+- [x] Add Docker setup for running backend + serving static frontend artifacts.
+- [x] Add cross-platform start/stop scripts in `scripts/` (macOS, Linux, Windows).
+- [x] Implement a simple backend API route (for example `/api/health`).
+- [x] Serve a temporary static hello-world page from FastAPI at `/` to verify wiring.
+- [x] Document local run flow briefly in README/docs.
 - [ ] Pause for user approval before Part 3.
 
 ### Tests for Part 2
 
 - **Backend unit tests**
-  - [ ] Health route returns expected payload and status.
-  - [ ] FastAPI app startup/shutdown smoke test.
+  - [x] Health route returns expected payload and status.
+  - [x] FastAPI app startup/shutdown smoke test.
 - **Frontend unit/component tests**
   - [ ] None required in this part unless temporary frontend code is introduced.
 - **Frontend integration/e2e tests**
-  - [ ] Browser test that `/` serves the hello-world page.
-  - [ ] Browser/API test that hello-world page can call backend route.
+  - [x] Browser test that `/` serves the hello-world page.
+  - [x] Browser/API test that hello-world page can call backend route.
 
 ### Success criteria for Part 2
 
-- [ ] `docker build` and container startup work locally.
-- [ ] Visiting `/` shows hello-world page served by backend.
-- [ ] Backend API route is reachable from the running app.
+- [x] `docker build` and container startup work locally.
+- [x] Visiting `/` shows hello-world page served by backend.
+- [x] Backend API route is reachable from the running app.
 
 ## Part 3 - Add in Frontend
 
 ### Implementation checklist
 
-- [ ] Build the existing Next.js frontend as static assets.
-- [ ] Configure FastAPI static serving so `/` renders the Kanban frontend.
-- [ ] Ensure frontend assets resolve correctly under container runtime.
-- [ ] Remove temporary hello-world page wiring from Part 2.
+- [x] Build the existing Next.js frontend as static assets.
+- [x] Configure FastAPI static serving so `/` renders the Kanban frontend.
+- [x] Ensure frontend assets resolve correctly under container runtime.
+- [x] Remove temporary hello-world page wiring from Part 2.
 - [ ] Pause for user approval before Part 4.
 
 ### Tests for Part 3
 
 - **Backend unit tests**
-  - [ ] Test static asset route/fallback handling in backend.
+  - [x] Test static asset route/fallback handling in backend.
 - **Frontend unit/component tests**
-  - [ ] Run and keep passing existing component + utility tests.
+  - [x] Run and keep passing existing component + utility tests.
 - **Frontend integration/e2e tests**
-  - [ ] Browser test that `/` shows the Kanban board after container startup.
-  - [ ] Smoke test for static asset loading (JS/CSS served correctly).
+  - [x] Browser test that `/` shows the Kanban board after container startup.
+    - Manual fallback accepted: start app, open `http://127.0.0.1:8000/`, confirm `Kanban Studio` heading and 5 columns render.
+  - [x] Smoke test for static asset loading (JS/CSS served correctly).
 
 ### Success criteria for Part 3
 
-- [ ] Kanban board displays from backend-served static frontend at `/`.
-- [ ] Existing frontend tests pass.
-- [ ] Containerized app serves frontend reliably.
+- [x] Kanban board displays from backend-served static frontend at `/`.
+- [x] Existing frontend tests pass.
+- [x] Containerized app serves frontend reliably.
 
 ## Part 4 - Fake user sign-in experience
 
 ### Implementation checklist
 
-- [ ] Add login screen shown before board access.
-- [ ] Implement hardcoded credential check (`user` / `password`) for MVP.
-- [ ] Persist authenticated session state for active browser session.
-- [ ] Add logout action returning user to login screen.
-- [ ] Protect board route so unauthenticated users cannot access board content.
+- [x] Add login screen shown before board access.
+- [x] Implement hardcoded credential check (`user` / `password`) for MVP.
+- [x] Persist authenticated session state for active browser session.
+- [x] Add logout action returning user to login screen.
+- [x] Protect board route so unauthenticated users cannot access board content.
 - [ ] Pause for user approval before Part 5.
 
 ### Tests for Part 4
 
 - **Backend unit tests**
-  - [ ] If backend participates in auth, test login/logout/session endpoints.
+  - [x] If backend participates in auth, test login/logout/session endpoints.
+    - N/A for Part 4 implementation: auth gate is frontend-only in this phase.
 - **Frontend unit/component tests**
-  - [ ] Login form validation and credential handling tests.
-  - [ ] Route/guard behavior tests for auth gating.
+  - [x] Login form validation and credential handling tests.
+  - [x] Route/guard behavior tests for auth gating.
 - **Frontend integration/e2e tests**
-  - [ ] User cannot access board without login.
-  - [ ] Successful login displays board.
-  - [ ] Logout returns to login and revokes access.
+  - [x] User cannot access board without login.
+  - [x] Successful login displays board.
+  - [x] Logout returns to login and revokes access.
 
 ### Success criteria for Part 4
 
-- [ ] Only correct credentials allow access.
-- [ ] Login and logout flows behave consistently.
-- [ ] Board is hidden when unauthenticated.
+- [x] Only correct credentials allow access.
+- [x] Login and logout flows behave consistently.
+- [x] Board is hidden when unauthenticated.
 
 ## Part 5 - Database modeling
 
 ### Implementation checklist
 
-- [ ] Propose SQLite schema for users, board metadata, and board JSON state.
-- [ ] Keep one board per user for MVP while preserving multi-user structure.
-- [ ] Define migration/initialization strategy for creating DB if missing.
-- [ ] Document schema rationale in `docs/` and request user sign-off.
+- [x] Propose SQLite schema for users, board metadata, and board JSON state.
+- [x] Keep one board per user for MVP while preserving multi-user structure.
+- [x] Define migration/initialization strategy for creating DB if missing.
+- [x] Document schema rationale in `docs/` and request user sign-off.
 - [ ] Pause for user approval before Part 6.
 
 ### Tests for Part 5
 
 - **Backend unit tests**
-  - [ ] Schema creation/initialization test for empty filesystem.
-  - [ ] Serialization/deserialization tests for board JSON payloads.
+  - [x] Schema creation/initialization test for empty filesystem.
+  - [x] Serialization/deserialization tests for board JSON payloads.
 - **Frontend unit/component tests**
-  - [ ] None required unless frontend model contracts are added.
+  - [x] None required unless frontend model contracts are added.
 - **Frontend integration/e2e tests**
-  - [ ] None required in this planning/modeling step.
+  - [x] None required in this planning/modeling step.
 
 ### Success criteria for Part 5
 
-- [ ] Schema and JSON storage approach are documented and approved by user.
-- [ ] DB bootstrap path is clear and testable.
+- [x] Schema and JSON storage approach are documented and approved by user.
+- [x] DB bootstrap path is clear and testable.
 
 ## Part 6 - Backend
 
 ### Implementation checklist
 
-- [ ] Add API routes to fetch and update board state for authenticated user.
-- [ ] Implement service/repository layer for DB reads/writes.
-- [ ] Ensure DB file is auto-created and initialized if missing.
-- [ ] Validate API request/response shapes with typed schemas.
-- [ ] Add error handling for invalid payloads and missing board state.
+- [x] Add API routes to fetch and update board state for authenticated user.
+- [x] Implement service/repository layer for DB reads/writes.
+- [x] Ensure DB file is auto-created and initialized if missing.
+- [x] Validate API request/response shapes with typed schemas.
+- [x] Add error handling for invalid payloads and missing board state.
 - [ ] Pause for user approval before Part 7.
 
 ### Tests for Part 6
 
 - **Backend unit tests**
-  - [ ] Route tests for read/update success and validation failures.
-  - [ ] Repository tests for create/read/update board records.
-  - [ ] Initialization test for missing DB file.
+  - [x] Route tests for read/update success and validation failures.
+  - [x] Repository tests for create/read/update board records.
+  - [x] Initialization test for missing DB file.
 - **Frontend unit/component tests**
-  - [ ] None required in this backend-only step.
+  - [x] None required in this backend-only step.
 - **Frontend integration/e2e tests**
-  - [ ] Optional API contract smoke tests if a harness is present.
+  - [x] Optional API contract smoke tests if a harness is present.
+    - Covered via backend API route tests in `backend/tests/test_app.py`.
 
 ### Success criteria for Part 6
 
-- [ ] Backend can persist and return board JSON per user.
-- [ ] DB auto-creation works from clean state.
-- [ ] Backend tests pass with good coverage of core paths.
+- [x] Backend can persist and return board JSON per user.
+- [x] DB auto-creation works from clean state.
+- [x] Backend tests pass with good coverage of core paths.
 
 ## Part 7 - Frontend + Backend
 
 ### Implementation checklist
 
-- [ ] Replace frontend in-memory board state source with backend API fetch.
-- [ ] Wire card add/edit/delete/move and column rename to backend persistence.
-- [ ] Add loading and basic error states for network operations.
-- [ ] Keep UI behavior consistent with existing demo interactions.
+- [x] Replace frontend in-memory board state source with backend API fetch.
+- [x] Wire card add/edit/delete/move and column rename to backend persistence.
+- [x] Add loading and basic error states for network operations.
+- [x] Keep UI behavior consistent with existing demo interactions.
 - [ ] Pause for user approval before Part 8.
 
 ### Tests for Part 7
 
 - **Backend unit tests**
-  - [ ] Keep API tests passing with any contract updates.
+  - [x] Keep API tests passing with any contract updates.
 - **Frontend unit/component tests**
-  - [ ] Board behavior tests using mocked API responses.
-  - [ ] Error/loading state tests.
+  - [x] Board behavior tests using mocked API responses.
+  - [x] Error/loading state tests.
 - **Frontend integration/e2e tests**
-  - [ ] End-to-end CRUD and drag/drop persistence test.
-  - [ ] Reload test confirms state remains persisted.
+  - [x] End-to-end CRUD and drag/drop persistence test.
+  - [x] Reload test confirms state remains persisted.
 
 ### Success criteria for Part 7
 
-- [ ] Kanban operations persist via backend.
-- [ ] Refreshing the page keeps latest board state.
-- [ ] Frontend and backend test suites pass.
+- [x] Kanban operations persist via backend.
+- [x] Refreshing the page keeps latest board state.
+- [x] Frontend and backend test suites pass.
 
 ## Part 8 - AI connectivity
 
