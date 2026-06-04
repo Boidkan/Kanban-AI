@@ -1,9 +1,17 @@
+import os
 from pathlib import Path
+from typing import Any, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 
+from backend.ai import (
+    OPENAI_MODEL,
+    OpenAIResponseError,
+    call_openai_chat,
+    call_openai_structured_board_response,
+)
 from backend.db import (
     DEFAULT_DB_PATH,
     BoardNotFoundError,
@@ -43,6 +51,46 @@ class BoardUpdateRequestModel(BaseModel):
     board: BoardModel
 
 
+class AIConnectivityResponseModel(BaseModel):
+    model: str
+    prompt: str
+    answer: str
+    is_correct: bool
+
+
+class AIConversationMessageModel(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class AIChatRequestModel(BaseModel):
+    question: str
+    conversation: list[AIConversationMessageModel] = []
+
+
+class AIStructuredOutputModel(BaseModel):
+    assistant_response: str
+    board_update: Optional[dict[str, Any]] = None
+
+
+class AIChatResponseModel(BaseModel):
+    model: str
+    message: str
+    board: BoardModel
+    version: int
+    board_updated: bool
+
+
+def _merge_board_update(
+    current_board: dict[str, Any], board_update: dict[str, Any]
+) -> dict[str, Any]:
+    merged = {
+        "columns": board_update.get("columns", current_board.get("columns")),
+        "cards": board_update.get("cards", current_board.get("cards")),
+    }
+    return merged
+
+
 def create_app(
     frontend_dir: Path = DEFAULT_FRONTEND_DIR,
     db_path: Path = DEFAULT_DB_PATH,
@@ -76,6 +124,96 @@ def create_app(
         except (UserNotFoundError, BoardNotFoundError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return BoardResponseModel(username=username, version=version, board=board)
+
+    @app.post("/api/ai/connectivity", response_model=AIConnectivityResponseModel)
+    def ai_connectivity_test() -> AIConnectivityResponseModel:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="OPENAI_API_KEY is not configured.",
+            )
+
+        prompt = "What is 2+2? Reply with only the number."
+
+        try:
+            answer = call_openai_chat(prompt=prompt, api_key=api_key)
+        except OpenAIResponseError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        normalized = "".join(ch for ch in answer if ch.isdigit())
+        return AIConnectivityResponseModel(
+            model=OPENAI_MODEL,
+            prompt=prompt,
+            answer=answer,
+            is_correct=normalized == "4",
+        )
+
+    @app.post("/api/ai/board/{username}", response_model=AIChatResponseModel)
+    def ai_board_chat(username: str, payload: AIChatRequestModel) -> AIChatResponseModel:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="OPENAI_API_KEY is not configured.",
+            )
+
+        try:
+            current_board, current_version = get_board_for_user(
+                db_path=db_path, username=username
+            )
+        except (UserNotFoundError, BoardNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        try:
+            raw_response = call_openai_structured_board_response(
+                question=payload.question,
+                board=current_board,
+                conversation=[message.model_dump() for message in payload.conversation],
+                api_key=api_key,
+            )
+            structured = AIStructuredOutputModel.model_validate(raw_response)
+        except OpenAIResponseError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"OpenAI structured output failed validation: {exc}",
+            ) from exc
+
+        if structured.board_update is None:
+            return AIChatResponseModel(
+                model=OPENAI_MODEL,
+                message=structured.assistant_response,
+                board=current_board,
+                version=current_version,
+                board_updated=False,
+            )
+
+        try:
+            merged_board_update = _merge_board_update(current_board, structured.board_update)
+            validated_board = BoardModel.model_validate(merged_board_update)
+            next_version = update_board_for_user(
+                board=validated_board.model_dump(),
+                db_path=db_path,
+                username=username,
+            )
+            next_board, _ = get_board_for_user(db_path=db_path, username=username)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"OpenAI board_update is invalid: {exc}",
+            ) from exc
+        except (UserNotFoundError, BoardNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        return AIChatResponseModel(
+            model=OPENAI_MODEL,
+            message=structured.assistant_response,
+            board=next_board,
+            version=next_version,
+            board_updated=True,
+        )
 
     @app.get("/{full_path:path}")
     def frontend(full_path: str) -> Response:

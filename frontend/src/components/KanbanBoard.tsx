@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -14,7 +14,7 @@ import {
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
-import { fetchBoard, saveBoard } from "@/lib/api";
+import { chatWithAI, fetchBoard, saveBoard, type AIConversationMessage } from "@/lib/api";
 
 type KanbanBoardProps = {
   onLogout?: () => void;
@@ -24,8 +24,12 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAIThinking, setIsAIThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiError, setAIError] = useState<string | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [chatInput, setChatInput] = useState("");
+  const [messages, setMessages] = useState<AIConversationMessage[]>([]);
   const username = "user";
 
   const sensors = useSensors(
@@ -80,6 +84,35 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   const commitBoard = (nextBoard: BoardData) => {
     setBoard(nextBoard);
     void persistBoard(nextBoard);
+  };
+
+  const handleAIChatSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const question = chatInput.trim();
+    if (!question) {
+      return;
+    }
+
+    const nextConversation: AIConversationMessage[] = [
+      ...messages,
+      { role: "user", content: question },
+    ];
+    setMessages(nextConversation);
+    setChatInput("");
+    setAIError(null);
+    setIsAIThinking(true);
+
+    try {
+      const response = await chatWithAI(username, question, nextConversation);
+      setMessages((prev) => [...prev, { role: "assistant", content: response.message }]);
+      if (response.board_updated) {
+        setBoard(response.board);
+      }
+    } catch (chatError) {
+      setAIError(chatError instanceof Error ? chatError.message : "AI request failed.");
+    } finally {
+      setIsAIThinking(false);
+    }
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -231,32 +264,103 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
           </div>
         </header>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <section className="grid gap-6 lg:grid-cols-5">
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-              />
-            ))}
-          </section>
-          <DragOverlay>
-            {activeCard ? (
-              <div className="w-[260px]">
-                <KanbanCardPreview card={activeCard} />
-              </div>
+        <div className="grid gap-6 xl:grid-cols-[3fr_1fr]">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <section className="grid gap-6 lg:grid-cols-5">
+              {board.columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  onRename={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
+                />
+              ))}
+            </section>
+            <DragOverlay>
+              {activeCard ? (
+                <div className="w-[260px]">
+                  <KanbanCardPreview card={activeCard} />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+
+          <aside className="flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-white p-5 shadow-[var(--shadow)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
+              AI Assistant
+            </p>
+            <h2 className="mt-2 font-display text-xl font-semibold text-[var(--navy-dark)]">
+              Board Chat
+            </h2>
+            <p className="mt-2 text-sm text-[var(--gray-text)]">
+              Ask for planning help or board updates.
+            </p>
+
+            <div className="mt-4 flex-1 space-y-3 overflow-auto rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] p-3">
+              {messages.length === 0 ? (
+                <p className="text-sm text-[var(--gray-text)]">
+                  Try: &quot;Summarize the board and suggest next actions.&quot;
+                </p>
+              ) : (
+                messages.map((message, index) => (
+                  <div
+                    key={`${message.role}-${index}`}
+                    className={`rounded-xl px-3 py-2 text-sm ${
+                      message.role === "user"
+                        ? "ml-6 bg-[var(--secondary-purple)] text-white"
+                        : "mr-6 bg-white text-[var(--navy-dark)]"
+                    }`}
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                      {message.role}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap">{message.content}</p>
+                  </div>
+                ))
+              )}
+              {isAIThinking ? (
+                <p className="text-sm font-semibold text-[var(--primary-blue)]">AI is thinking...</p>
+              ) : null}
+            </div>
+
+            {aiError ? (
+              <p
+                role="alert"
+                className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              >
+                {aiError}
+              </p>
             ) : null}
-          </DragOverlay>
-        </DndContext>
+
+            <form onSubmit={handleAIChatSubmit} className="mt-3 space-y-2">
+              <label htmlFor="ai-chat-input" className="sr-only">
+                Ask AI
+              </label>
+              <textarea
+                id="ai-chat-input"
+                value={chatInput}
+                onChange={(event) => setChatInput(event.target.value)}
+                rows={3}
+                placeholder="Ask AI about your board..."
+                className="w-full resize-none rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm outline-none focus:border-[var(--primary-blue)]"
+              />
+              <button
+                type="submit"
+                disabled={isAIThinking}
+                className="w-full rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Send
+              </button>
+            </form>
+          </aside>
+        </div>
       </main>
     </div>
   );

@@ -2,15 +2,17 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { initialData } from "@/lib/kanban";
-import { fetchBoard, saveBoard } from "@/lib/api";
+import { chatWithAI, fetchBoard, saveBoard } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
   fetchBoard: vi.fn(),
   saveBoard: vi.fn(),
+  chatWithAI: vi.fn(),
 }));
 
 const mockedFetchBoard = vi.mocked(fetchBoard);
 const mockedSaveBoard = vi.mocked(saveBoard);
+const mockedChatWithAI = vi.mocked(chatWithAI);
 
 const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 
@@ -25,6 +27,13 @@ describe("KanbanBoard", () => {
       username: "user",
       version: 2,
       board: initialData,
+    });
+    mockedChatWithAI.mockResolvedValue({
+      model: "gpt-4o-mini",
+      message: "No changes needed.",
+      board: initialData,
+      version: 1,
+      board_updated: false,
     });
   });
 
@@ -77,5 +86,36 @@ describe("KanbanBoard", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("backend unavailable");
     expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+  });
+
+  it("renders chat response and applies AI board update", async () => {
+    const updatedBoard = {
+      ...initialData,
+      columns: initialData.columns.map((column, index) =>
+        index === 0 ? { ...column, title: "AI Updated Column" } : column
+      ),
+    };
+    mockedChatWithAI.mockResolvedValueOnce({
+      model: "gpt-4o-mini",
+      message: "I updated the first column title.",
+      board: updatedBoard,
+      version: 2,
+      board_updated: true,
+    });
+
+    render(<KanbanBoard />);
+    await screen.findAllByTestId(/column-/i);
+
+    await userEvent.type(
+      screen.getByPlaceholderText(/ask ai about your board/i),
+      "Update the first column title."
+    );
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    expect(await screen.findByText("I updated the first column title.")).toBeInTheDocument();
+    const firstColumn = getFirstColumn();
+    expect(within(firstColumn).getByLabelText("Column title")).toHaveValue(
+      "AI Updated Column"
+    );
   });
 });

@@ -63,6 +63,48 @@ const setupBoardApiMock = async (page: Page) => {
 
     await route.fallback();
   });
+
+  await page.route("**/api/ai/board/user", async (route) => {
+    const payload = route.request().postDataJSON() as {
+      question: string;
+      conversation: { role: "user" | "assistant"; content: string }[];
+    };
+    const shouldUpdate = payload.question.toLowerCase().includes("rename");
+
+    if (shouldUpdate) {
+      board = {
+        ...board,
+        columns: board.columns.map((column, index) =>
+          index === 0 ? { ...column, title: "AI Renamed Backlog" } : column
+        ),
+      };
+      version += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          message: "I renamed the first column.",
+          board,
+          version,
+          board_updated: true,
+        }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        message: "No board changes needed.",
+        board,
+        version,
+        board_updated: false,
+      }),
+    });
+  });
 };
 
 const login = async (page: Page) => {
@@ -122,4 +164,18 @@ test("moves a card between columns", async ({ page }) => {
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
   await page.reload();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+});
+
+test("supports AI chat flow with board update", async ({ page }) => {
+  await setupBoardApiMock(page);
+  await login(page);
+
+  await page
+    .getByPlaceholder("Ask AI about your board...")
+    .fill("Rename the first column to show AI update.");
+  await page.getByRole("button", { name: /send/i }).click();
+
+  await expect(page.getByText("I renamed the first column.")).toBeVisible();
+  const firstColumn = page.locator('[data-testid^="column-"]').first();
+  await expect(firstColumn.getByLabel("Column title")).toHaveValue("AI Renamed Backlog");
 });

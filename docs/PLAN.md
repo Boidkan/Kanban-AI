@@ -204,80 +204,80 @@ This document is the single detailed execution plan for Parts 1-10, including im
 
 ### Implementation checklist
 
-- [ ] Add backend OpenRouter client configuration using `.env` key.
-- [ ] Use model `openai/gpt-oss-120b` exactly as specified.
-- [ ] Add a simple backend AI route for connectivity verification.
-- [ ] Implement deterministic "2+2" connectivity check path.
+- [x] Add backend OpenAI client configuration using `.env` key.
+- [x] Use model `gpt-4o-mini`.
+- [x] Add a simple backend AI route for connectivity verification.
+- [x] Implement deterministic "2+2" connectivity check path.
 - [ ] Pause for user approval before Part 9.
 
 ### Tests for Part 8
 
 - **Backend unit tests**
-  - [ ] AI client request builder test (headers, model, payload).
-  - [ ] Route behavior tests with mocked OpenRouter responses.
+  - [x] AI client request builder test (headers, model, payload).
+  - [x] Route behavior tests with mocked OpenAI responses.
 - **Frontend unit/component tests**
-  - [ ] None required in this backend connectivity step.
+  - [x] None required in this backend connectivity step.
 - **Frontend integration/e2e tests**
-  - [ ] Optional local smoke test for AI route when key is present.
+  - [x] Optional local smoke test for AI route when key is present.
 
 ### Success criteria for Part 8
 
-- [ ] Backend can successfully call OpenRouter with configured model.
-- [ ] "2+2" test path confirms end-to-end connectivity.
+- [x] Backend can successfully call OpenAI with configured model.
+- [x] "2+2" test path confirms end-to-end connectivity.
 
 ## Part 9 - Structured outputs for board updates
 
 ### Implementation checklist
 
-- [ ] Define structured output schema containing assistant message and optional board update.
-- [ ] Send board JSON + user question + conversation history to model.
-- [ ] Validate and parse model output before applying updates.
-- [ ] Apply optional board updates transactionally in backend.
-- [ ] Return both assistant response and resulting board state to frontend.
+- [x] Define structured output schema containing assistant message and optional board update.
+- [x] Send board JSON + user question + conversation history to model.
+- [x] Validate and parse model output before applying updates.
+- [x] Apply optional board updates transactionally in backend.
+- [x] Return both assistant response and resulting board state to frontend.
 - [ ] Pause for user approval before Part 10.
 
 ### Tests for Part 9
 
 - **Backend unit tests**
-  - [ ] Schema validation tests for valid/invalid model output.
-  - [ ] Service tests for "message only" vs "message + board update".
-  - [ ] Persistence tests ensuring updates are applied correctly.
+  - [x] Schema validation tests for valid/invalid model output.
+  - [x] Service tests for "message only" vs "message + board update".
+  - [x] Persistence tests ensuring updates are applied correctly.
 - **Frontend unit/component tests**
-  - [ ] None required until UI wiring in Part 10.
+  - [x] None required until UI wiring in Part 10.
 - **Frontend integration/e2e tests**
-  - [ ] Optional API-level integration test with mocked model provider.
+  - [x] Optional API-level integration test with mocked model provider.
 
 ### Success criteria for Part 9
 
-- [ ] Backend consistently returns validated structured responses.
-- [ ] Optional board updates are safely persisted when present.
-- [ ] Invalid model output is handled gracefully.
+- [x] Backend consistently returns validated structured responses.
+- [x] Optional board updates are safely persisted when present.
+- [x] Invalid model output is handled gracefully.
 
 ## Part 10 - AI sidebar in UI
 
 ### Implementation checklist
 
-- [ ] Add sidebar chat UI integrated into existing Kanban layout.
-- [ ] Send user prompts and conversation history to backend AI endpoint.
-- [ ] Render assistant responses in chat thread.
-- [ ] When backend returns board updates, refresh board state in UI automatically.
-- [ ] Provide clear loading and error feedback in chat interaction.
-- [ ] Run full regression tests and pause for final user approval.
+- [x] Add sidebar chat UI integrated into existing Kanban layout.
+- [x] Send user prompts and conversation history to backend AI endpoint.
+- [x] Render assistant responses in chat thread.
+- [x] When backend returns board updates, refresh board state in UI automatically.
+- [x] Provide clear loading and error feedback in chat interaction.
+- [x] Run full regression tests and pause for final user approval.
 
 ### Tests for Part 10
 
 - **Backend unit tests**
-  - [ ] Keep AI and board update endpoint tests passing with UI contract.
+  - [x] Keep AI and board update endpoint tests passing with UI contract.
 - **Frontend unit/component tests**
-  - [ ] Chat input/thread rendering tests.
-  - [ ] Board refresh behavior test when update payload is returned.
+  - [x] Chat input/thread rendering tests.
+  - [x] Board refresh behavior test when update payload is returned.
 - **Frontend integration/e2e tests**
-  - [ ] Full chat flow test with mocked AI response.
-  - [ ] Test where AI response updates board and UI reflects changes.
-  - [ ] Regression smoke for login + core Kanban interactions.
+  - [x] Full chat flow test with mocked AI response.
+  - [x] Test where AI response updates board and UI reflects changes.
+  - [x] Regression smoke for login + core Kanban interactions.
 
 ### Success criteria for Part 10
 
-- [ ] Sidebar chat works end-to-end with backend.
-- [ ] AI-triggered board updates appear in UI without manual refresh.
-- [ ] Comprehensive tests pass across frontend and backend.
+- [x] Sidebar chat works end-to-end with backend.
+- [x] AI-triggered board updates appear in UI without manual refresh.
+- [x] Comprehensive tests pass across frontend and backend.
