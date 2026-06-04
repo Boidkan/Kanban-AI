@@ -21,7 +21,7 @@ You do not need prior full-stack experience to follow it. If you can run termina
 
 ## What the app does
 
-- Lets a user sign in with MVP credentials (currently harded coded on front end):
+- Lets a user sign in with MVP credentials (currently hard coded):
   - username: `user`
   - password: `password`
 - Shows a Kanban board with editable columns and draggable cards
