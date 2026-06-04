@@ -39,6 +39,16 @@ class BoardNotFoundError(Exception):
     pass
 
 
+def is_legacy_example_board(board: dict[str, Any]) -> bool:
+    cards = board.get("cards")
+    if not isinstance(cards, dict):
+        return False
+    return any(
+        isinstance(card, dict) and card.get("title") == "Example task"
+        for card in cards.values()
+    )
+
+
 def default_board_payload() -> dict[str, Any]:
     return {
         "columns": [
@@ -135,13 +145,29 @@ def initialize_database(
         if user_row is None:
             raise RuntimeError("Failed to resolve default user during DB initialization.")
 
+        default_board_json = serialize_board(board)
         conn.execute(
             """
             INSERT OR IGNORE INTO boards (user_id, board_json)
             VALUES (?, ?)
             """,
-            (user_row[0], serialize_board(board)),
+            (user_row[0], default_board_json),
         )
+        existing_board_row = conn.execute(
+            "SELECT board_json FROM boards WHERE user_id = ?",
+            (user_row[0],),
+        ).fetchone()
+        if existing_board_row is not None:
+            existing_board = deserialize_board(existing_board_row[0])
+            if is_legacy_example_board(existing_board):
+                conn.execute(
+                    """
+                    UPDATE boards
+                    SET board_json = ?, version = 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                    """,
+                    (default_board_json, user_row[0]),
+                )
         conn.commit()
 
 

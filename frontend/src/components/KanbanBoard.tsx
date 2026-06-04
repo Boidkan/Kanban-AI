@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -112,6 +112,16 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
       setAIError(chatError instanceof Error ? chatError.message : "AI request failed.");
     } finally {
       setIsAIThinking(false);
+    }
+  };
+
+  const handleAIChatKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      const form = event.currentTarget.form;
+      if (form) {
+        form.requestSubmit();
+      }
     }
   };
 
@@ -347,6 +357,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
                 id="ai-chat-input"
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
+                onKeyDown={handleAIChatKeyDown}
                 rows={3}
                 placeholder="Ask AI about your board..."
                 className="w-full resize-none rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm outline-none focus:border-[var(--primary-blue)]"

@@ -12,6 +12,23 @@ from backend.db import (
 )
 
 
+LEGACY_EXAMPLE_BOARD = {
+    "columns": [
+        {"id": "col-backlog", "title": "Backlog", "cardIds": ["card-1", "card-2"]},
+        {"id": "col-discovery", "title": "Discovery", "cardIds": ["card-3"]},
+        {"id": "col-progress", "title": "In Progress", "cardIds": ["card-4"]},
+        {"id": "col-review", "title": "Review", "cardIds": []},
+        {"id": "col-done", "title": "Done", "cardIds": []},
+    ],
+    "cards": {
+        "card-1": {"id": "card-1", "title": "Example task", "details": "Seed card 1"},
+        "card-2": {"id": "card-2", "title": "Example task", "details": "Seed card 2"},
+        "card-3": {"id": "card-3", "title": "Example task", "details": "Seed card 3"},
+        "card-4": {"id": "card-4", "title": "Example task", "details": "Seed card 4"},
+    },
+}
+
+
 def test_initialize_database_creates_schema_and_default_records(tmp_path: Path) -> None:
     db_path = tmp_path / "data" / "app.db"
 
@@ -99,3 +116,15 @@ def test_repository_raises_for_missing_board_state(tmp_path: Path) -> None:
         assert False, "Expected BoardNotFoundError for orphan user."
     except BoardNotFoundError:
         pass
+
+
+def test_initialize_database_migrates_legacy_example_seed(tmp_path: Path) -> None:
+    db_path = tmp_path / "data" / "app.db"
+    initialize_database(db_path=db_path, default_board=LEGACY_EXAMPLE_BOARD)
+    initialize_database(db_path=db_path)
+
+    board, version = get_board_for_user(db_path=db_path, username="user")
+
+    assert version == 1
+    assert board["cards"]["card-1"]["title"] == "Part 1 - Detailed planning"
+    assert board["cards"]["card-10"]["title"] == "Part 10 - Sidebar AI chat"
