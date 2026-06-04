@@ -83,6 +83,28 @@ export const login = async (
   return payload;
 };
 
+export const register = async (
+  username: string,
+  password: string
+): Promise<LoginResponse> => {
+  const response = await fetch(createUrl("/api/auth/register"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  const payload = (await response.json()) as LoginResponse;
+  setToken(payload.token);
+  return payload;
+};
+
 export const logout = async (): Promise<void> => {
   try {
     await fetch(createUrl("/api/auth/logout"), {

@@ -79,6 +79,98 @@ def test_login_rejects_invalid_credentials(tmp_path: Path) -> None:
     assert response.status_code == 401
 
 
+def test_login_unknown_username_and_wrong_password_share_generic_error(
+    tmp_path: Path,
+) -> None:
+    client = _make_client(tmp_path)
+    wrong_password = client.post(
+        "/api/auth/login", json={"username": "user", "password": "wrong"}
+    )
+    unknown_user = client.post(
+        "/api/auth/login", json={"username": "ghost", "password": "password"}
+    )
+    assert wrong_password.status_code == 401
+    assert unknown_user.status_code == 401
+    # Do not reveal which field was wrong.
+    assert wrong_password.json()["detail"] == unknown_user.json()["detail"]
+
+
+def test_seeded_user_token_authorizes_board(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    headers = _auth_headers(client)
+    assert client.get("/api/board", headers=headers).status_code == 200
+
+
+def test_register_creates_account_and_logs_in(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    response = client.post(
+        "/api/auth/register", json={"username": "alice", "password": "supersecret"}
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["username"] == "alice"
+    assert payload["token"]
+
+    headers = {"Authorization": f"Bearer {payload['token']}"}
+    board = client.get("/api/board", headers=headers)
+    assert board.status_code == 200
+    assert board.json()["version"] == 1
+
+
+def test_register_duplicate_username_returns_409(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    # 'user' is seeded at startup.
+    response = client.post(
+        "/api/auth/register", json={"username": "user", "password": "supersecret"}
+    )
+    assert response.status_code == 409
+
+
+def test_register_rejects_invalid_username_and_short_password(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    bad_username = client.post(
+        "/api/auth/register", json={"username": "no spaces!", "password": "supersecret"}
+    )
+    too_short_username = client.post(
+        "/api/auth/register", json={"username": "ab", "password": "supersecret"}
+    )
+    short_password = client.post(
+        "/api/auth/register", json={"username": "carol", "password": "short"}
+    )
+    assert bad_username.status_code == 422
+    assert too_short_username.status_code == 422
+    assert short_password.status_code == 422
+
+
+def test_registered_user_can_log_in_afterwards(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    client.post(
+        "/api/auth/register", json={"username": "dave", "password": "supersecret"}
+    )
+    login = client.post(
+        "/api/auth/login", json={"username": "dave", "password": "supersecret"}
+    )
+    assert login.status_code == 200
+    assert login.json()["username"] == "dave"
+
+
+def test_accounts_have_independent_boards(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    token = client.post(
+        "/api/auth/register", json={"username": "erin", "password": "supersecret"}
+    ).json()["token"]
+    erin = {"Authorization": f"Bearer {token}"}
+
+    board = client.get("/api/board", headers=erin).json()["board"]
+    board["columns"][0]["title"] = "Erin's column"
+    client.put("/api/board", json={"board": board}, headers=erin)
+
+    # The seeded default user's board is unaffected.
+    default_headers = _auth_headers(client)
+    default_board = client.get("/api/board", headers=default_headers).json()["board"]
+    assert default_board["columns"][0]["title"] != "Erin's column"
+
+
 def test_board_routes_require_authentication(tmp_path: Path) -> None:
     client = _make_client(tmp_path)
     assert client.get("/api/board").status_code == 401

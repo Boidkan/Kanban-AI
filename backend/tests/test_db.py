@@ -3,15 +3,18 @@ from pathlib import Path
 
 import pytest
 
+from backend.auth import hash_password, verify_password
 from backend.db import (
     BoardNotFoundError,
     BoardVersionConflictError,
     create_user_with_board,
     deserialize_board,
     get_board_for_user,
+    get_user_auth,
     initialize_database,
     serialize_board,
     update_board_for_user,
+    username_exists,
 )
 
 
@@ -46,6 +49,75 @@ def test_initialize_database_creates_schema_and_default_records(tmp_path: Path) 
     assert users == [("user",)]
     assert len(boards) == 1
     assert deserialize_board(boards[0][1])["columns"]
+
+
+def test_initialize_database_seeds_default_user_with_password_hash(tmp_path: Path) -> None:
+    db_path = tmp_path / "data" / "app.db"
+
+    initialize_database(db_path=db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(users)")]
+        password_hash = conn.execute(
+            "SELECT password_hash FROM users WHERE username = ?", ("user",)
+        ).fetchone()[0]
+
+    assert "password_hash" in columns
+    assert password_hash
+    assert verify_password("password", password_hash)
+
+
+def test_initialize_database_migrates_legacy_users_table(tmp_path: Path) -> None:
+    db_path = tmp_path / "data" / "app.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Legacy users table shape: no password_hash column.
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE users (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              username TEXT NOT NULL UNIQUE,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO users (username) VALUES ('user');
+            """
+        )
+        conn.commit()
+
+    initialize_database(db_path=db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(users)")]
+        password_hash = conn.execute(
+            "SELECT password_hash FROM users WHERE username = ?", ("user",)
+        ).fetchone()[0]
+
+    assert "password_hash" in columns
+    assert verify_password("password", password_hash)
+
+
+def test_create_user_with_board_persists_hash_and_helpers(tmp_path: Path) -> None:
+    db_path = tmp_path / "data" / "app.db"
+
+    create_user_with_board(
+        db_path=db_path, username="bob", password_hash=hash_password("secret")
+    )
+
+    assert username_exists(db_path=db_path, username="bob") is True
+    assert username_exists(db_path=db_path, username="nobody") is False
+    assert get_user_auth(db_path=db_path, username="nobody") is None
+
+    auth = get_user_auth(db_path=db_path, username="bob")
+    assert auth is not None
+    _user_id, stored_hash = auth
+    assert stored_hash is not None
+    assert verify_password("secret", stored_hash)
+
+    # Bob has his own seeded board, independent of the default user.
+    board, version = get_board_for_user(db_path=db_path, username="bob")
+    assert version == 1
+    assert board["columns"]
 
 
 def test_initialize_database_is_idempotent(tmp_path: Path) -> None:

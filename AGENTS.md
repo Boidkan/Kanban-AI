@@ -11,7 +11,7 @@ This project is building a Project Management App. Key features:
 
 ## Limitations
 
-For the MVP, there will only be a user sign in (hardcoded to 'user' and 'password') but the database will support multiple users for future.
+Auth is multi-user with open self-signup (backend `/api/auth/register`, passwords hashed with argon2 in SQLite). A default `user` / `password` account is seeded for convenience. (This supersedes the original MVP plan of a single hardcoded `user` / `password` login; see docs/auth_plan.md.)
 
 For the MVP, there will only be 1 Kanban board per signed in user.
 

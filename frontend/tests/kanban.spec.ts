@@ -37,12 +37,33 @@ const cloneBoard = (board: BoardData): BoardData => JSON.parse(JSON.stringify(bo
 const setupBoardApiMock = async (page: Page) => {
   let board = cloneBoard(initialBoard);
   let version = 1;
+  const registered = new Set(["user"]);
 
   await page.route("**/api/auth/login", async (route) => {
+    const body = route.request().postDataJSON() as { username?: string };
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ token: "e2e-token", username: "user" }),
+      body: JSON.stringify({ token: "e2e-token", username: body.username ?? "user" }),
+    });
+  });
+
+  await page.route("**/api/auth/register", async (route) => {
+    const body = route.request().postDataJSON() as { username?: string };
+    const username = (body.username ?? "").trim();
+    if (registered.has(username)) {
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Username is already taken." }),
+      });
+      return;
+    }
+    registered.add(username);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ token: "e2e-token", username }),
     });
   });
 
@@ -194,4 +215,38 @@ test("supports AI chat flow with board update", async ({ page }) => {
   await expect(page.getByText("I renamed the first column.")).toBeVisible();
   const firstColumn = page.locator('[data-testid^="column-"]').first();
   await expect(firstColumn.getByLabel("Column title")).toHaveValue("AI Renamed Backlog");
+});
+
+test("registers a new account, logs out, and logs back in", async ({ page }) => {
+  await setupBoardApiMock(page);
+  await page.goto("/");
+
+  await page.getByTestId("auth-mode-toggle").click();
+  await expect(page.getByRole("heading", { name: "Create account" })).toBeVisible();
+  await page.getByLabel("Username").fill("newuser");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Create account" }).click();
+
+  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+
+  await page.getByRole("button", { name: /log out/i }).click();
+  await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
+
+  await page.getByLabel("Username").fill("newuser");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: /sign in/i }).click();
+  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+});
+
+test("shows an error when registering a taken username", async ({ page }) => {
+  await setupBoardApiMock(page);
+  await page.goto("/");
+
+  await page.getByTestId("auth-mode-toggle").click();
+  await page.getByLabel("Username").fill("user");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Create account" }).click();
+
+  await expect(page.getByText("Username is already taken.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create account" })).toBeVisible();
 });

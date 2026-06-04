@@ -2,11 +2,30 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { getToken, login, logout } from "@/lib/api";
+import { getToken, login, logout, register } from "@/lib/api";
+
+type AuthMode = "login" | "register";
+
+const USERNAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+const USERNAME_ERROR =
+  "Username must be 3-32 characters: letters, numbers, _ or -.";
+const PASSWORD_ERROR = "Password must be at least 8 characters.";
+
+const validateRegistration = (username: string, password: string): string => {
+  const trimmed = username.trim();
+  if (trimmed.length < 3 || trimmed.length > 32 || !USERNAME_PATTERN.test(trimmed)) {
+    return USERNAME_ERROR;
+  }
+  if (password.length < 8) {
+    return PASSWORD_ERROR;
+  }
+  return "";
+};
 
 export const KanbanApp = () => {
   const [isReady, setIsReady] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [mode, setMode] = useState<AuthMode>("login");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -17,17 +36,43 @@ export const KanbanApp = () => {
     setIsReady(true);
   }, []);
 
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+  const isRegister = mode === "register";
+
+  const switchMode = () => {
+    setMode((current) => (current === "login" ? "register" : "login"));
+    setError("");
+    setPassword("");
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setIsSubmitting(true);
     setError("");
 
+    if (isRegister) {
+      const validationError = validateRegistration(username, password);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
     try {
-      await login(username, password);
+      if (isRegister) {
+        await register(username.trim(), password);
+      } else {
+        await login(username, password);
+      }
       setIsAuthenticated(true);
       setPassword("");
-    } catch {
-      setError("Invalid credentials. Use user / password.");
+    } catch (submitError) {
+      if (isRegister) {
+        setError(
+          submitError instanceof Error ? submitError.message : "Could not create account."
+        );
+      } else {
+        setError("Invalid credentials. Use user / password.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -36,6 +81,7 @@ export const KanbanApp = () => {
   const handleLogout = async () => {
     await logout();
     setIsAuthenticated(false);
+    setMode("login");
     setUsername("");
     setPassword("");
     setError("");
@@ -53,13 +99,19 @@ export const KanbanApp = () => {
             Project Management MVP
           </p>
           <h1 className="mt-3 font-display text-3xl font-semibold text-[var(--navy-dark)]">
-            Sign in
+            {isRegister ? "Create account" : "Sign in"}
           </h1>
           <p className="mt-2 text-sm text-[var(--gray-text)]">
-            Use <strong>user</strong> and <strong>password</strong>.
+            {isRegister ? (
+              "Choose a username and password to create your board."
+            ) : (
+              <>
+                Use <strong>user</strong> and <strong>password</strong>, or create an account.
+              </>
+            )}
           </p>
 
-          <form onSubmit={handleLogin} className="mt-6 space-y-4">
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <label className="block text-sm font-medium text-[var(--navy-dark)]">
               Username
               <input
@@ -78,7 +130,7 @@ export const KanbanApp = () => {
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"
                 className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm outline-none focus:border-[var(--primary-blue)]"
-                autoComplete="current-password"
+                autoComplete={isRegister ? "new-password" : "current-password"}
                 required
               />
             </label>
@@ -94,9 +146,24 @@ export const KanbanApp = () => {
               disabled={isSubmitting}
               className="w-full rounded-full bg-[var(--secondary-purple)] px-4 py-3 text-sm font-semibold uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting ? "Signing in..." : "Sign in"}
+              {isSubmitting
+                ? isRegister
+                  ? "Creating account..."
+                  : "Signing in..."
+                : isRegister
+                  ? "Create account"
+                  : "Sign in"}
             </button>
           </form>
+
+          <button
+            type="button"
+            onClick={switchMode}
+            data-testid="auth-mode-toggle"
+            className="mt-4 text-sm font-medium text-[var(--primary-blue)] underline-offset-2 hover:underline"
+          >
+            {isRegister ? "Back to sign in" : "Create an account"}
+          </button>
         </section>
       </main>
     );

@@ -21,9 +21,11 @@ You do not need prior full-stack experience to follow it. If you can run termina
 
 ## What the app does
 
-- Lets a user sign in with MVP credentials (currently hard coded):
+- Lets a user create an account (open self-signup) or sign in. A default account
+  is seeded for convenience:
   - username: `user`
   - password: `password`
+- Authenticates against the backend; passwords are hashed (argon2) in SQLite
 - Shows a Kanban board with editable columns and draggable cards
 - Saves board changes through backend APIs into SQLite
 - Includes an AI chat sidebar:
@@ -151,9 +153,9 @@ Linux/Windows scripts are also available in `scripts/`.
 
 1. Start the app.
 2. Go to `http://127.0.0.1:8000`.
-3. Sign in:
-   - `user`
-   - `password`
+3. Sign in with the seeded account (`user` / `password`), or click
+   **Create an account** to register your own username and password (min 8
+   characters). New accounts get their own board.
 4. Try core board actions:
    - rename a column
    - add a card
@@ -172,32 +174,56 @@ Linux/Windows scripts are also available in `scripts/`.
 
 ## API walkthrough
 
-### Get board for user
+All data and AI routes require a bearer token. The authenticated user comes from
+the token, so the routes have no username in the path.
+
+### Log in (or register) to get a token
 
 ```bash
-curl -s http://127.0.0.1:8000/api/board/user | python3 -m json.tool
+# Log in with the seeded account...
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"user","password":"password"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+
+# ...or create a new account (returns a token the same way):
+# curl -s -X POST http://127.0.0.1:8000/api/auth/register \
+#   -H "Content-Type: application/json" \
+#   -d '{"username":"alice","password":"supersecret"}'
 ```
 
-### Update board for user
+A request without a valid token returns `401`. A duplicate registration returns `409`.
+
+### Get the board
 
 ```bash
-curl -s -X PUT http://127.0.0.1:8000/api/board/user \
+curl -s http://127.0.0.1:8000/api/board \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+### Update the board
+
+```bash
+curl -s -X PUT http://127.0.0.1:8000/api/board \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"board":{"columns":[],"cards":{}}}'
 ```
 
-(Use valid board schema; invalid schema returns `422`.)
+(Use a valid, referentially consistent board; invalid schema or dangling card
+references return `422`. Pass `expected_version` to get `409` on a stale write.)
 
 ### AI connectivity check
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/api/ai/connectivity | python3 -m json.tool
+curl -s -X POST http://127.0.0.1:8000/api/ai/connectivity \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
 ### AI board chat
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/api/ai/board/user \
+curl -s -X POST http://127.0.0.1:8000/api/ai/board \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"question":"Summarize the board","conversation":[]}' | python3 -m json.tool
 ```
@@ -227,8 +253,19 @@ From repo root:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install fastapi "uvicorn[standard]" pytest httpx
+pip install fastapi "uvicorn[standard]" pytest httpx argon2-cffi
 PYTHONPATH=. pytest backend/tests
+```
+
+### Dockerized end-to-end smoke test
+
+Builds the image, starts the container, exercises the live endpoints (health,
+frontend, auth/login, registration, board, and a live AI connectivity call), then
+always tears the container down:
+
+```bash
+./scripts/test-docker.sh                  # full run
+RUN_AI_TEST=0 ./scripts/test-docker.sh    # skip the live OpenAI call
 ```
 
 ---
@@ -279,6 +316,7 @@ npx playwright install
 
 ## Next improvements (optional)
 
-- Move auth from hardcoded frontend logic to backend/DB-backed auth.
+- Password reset / change-password flow.
+- Rate limiting / lockout on login and registration.
 - Persist SQLite data across full container recreation with a Docker volume.
 - Add role-based permissions and audit trail for AI board updates.

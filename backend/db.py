@@ -5,6 +5,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from backend.auth import hash_password
+
 DEFAULT_DB_PATH = Path("backend/data/app.db")
 
 SCHEMA_SQL = """
@@ -14,6 +16,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
+  password_hash TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -128,9 +131,17 @@ def deserialize_board(payload: str) -> dict[str, Any]:
     return data
 
 
+def _ensure_password_hash_column(conn: sqlite3.Connection) -> None:
+    """Add users.password_hash to databases created before it existed."""
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if "password_hash" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+
+
 def initialize_database(
     db_path: Path = DEFAULT_DB_PATH,
     default_username: str = "user",
+    default_password: str = "password",
     default_board: dict[str, Any] | None = None,
 ) -> None:
     board = default_board if default_board is not None else default_board_payload()
@@ -138,16 +149,25 @@ def initialize_database(
 
     with sqlite3.connect(db_path) as conn:
         conn.executescript(SCHEMA_SQL)
+        _ensure_password_hash_column(conn)
         conn.execute(
             "INSERT OR IGNORE INTO users (username) VALUES (?)",
             (default_username,),
         )
         user_row = conn.execute(
-            "SELECT id FROM users WHERE username = ?",
+            "SELECT id, password_hash FROM users WHERE username = ?",
             (default_username,),
         ).fetchone()
         if user_row is None:
             raise RuntimeError("Failed to resolve default user during DB initialization.")
+
+        # Seed/backfill the default account's password hash (covers both fresh
+        # databases and legacy ones migrated above).
+        if not user_row[1]:
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (hash_password(default_password), user_row[0]),
+            )
 
         default_board_json = serialize_board(board)
         conn.execute(
@@ -179,27 +199,63 @@ def create_user_with_board(
     db_path: Path = DEFAULT_DB_PATH,
     username: str = "user",
     board: dict[str, Any] | None = None,
+    password_hash: str | None = None,
 ) -> None:
     payload = board if board is not None else default_board_payload()
     initialize_database(db_path=db_path)
 
     with sqlite3.connect(db_path) as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO users (username) VALUES (?)",
-            (username,),
+            "INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)",
+            (username, password_hash),
         )
         user_row = conn.execute(
-            "SELECT id FROM users WHERE username = ?",
+            "SELECT id, password_hash FROM users WHERE username = ?",
             (username,),
         ).fetchone()
         if user_row is None:
             raise RuntimeError(f"Failed to create or resolve user '{username}'.")
+
+        # Set the hash if the user pre-existed without one (e.g. created before
+        # this column existed) and a hash was supplied now.
+        if password_hash and not user_row[1]:
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (password_hash, user_row[0]),
+            )
 
         conn.execute(
             "INSERT OR IGNORE INTO boards (user_id, board_json) VALUES (?, ?)",
             (user_row[0], serialize_board(payload)),
         )
         conn.commit()
+
+
+def get_user_auth(
+    db_path: Path = DEFAULT_DB_PATH,
+    username: str = "user",
+) -> tuple[int, str | None] | None:
+    """Return (user_id, password_hash) for a username, or None if absent."""
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, password_hash FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+    if row is None:
+        return None
+    return int(row[0]), row[1]
+
+
+def username_exists(
+    db_path: Path = DEFAULT_DB_PATH,
+    username: str = "user",
+) -> bool:
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+    return row is not None
 
 
 def get_board_for_user(

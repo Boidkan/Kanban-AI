@@ -63,6 +63,21 @@ assert len(d['board']['columns']) == 5, 'expected 5 columns'
 assert len(d['board']['cards']) == 10, 'expected 10 cards'
 " || fail "board contents"
 
+echo "Checking /api/auth/register (new account) and its token..."
+REG_TOKEN=$(curl -sf -X POST "$BASE_URL/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"smoketest","password":"smoketestpw"}' \
+  | python3 -c "import sys, json; print(json.load(sys.stdin)['token'])") || fail "register"
+[ -n "$REG_TOKEN" ] || fail "register returned empty token"
+code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $REG_TOKEN" "$BASE_URL/api/board")
+[ "$code" = "200" ] || fail "registered token did not authorize board (HTTP $code)"
+
+echo "Checking duplicate registration is rejected..."
+code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"smoketest","password":"smoketestpw"}')
+[ "$code" = "409" ] || fail "expected 409 for duplicate username, got HTTP $code"
+
 if [ "$RUN_AI_TEST" = "1" ]; then
   echo "Checking /api/ai/connectivity (live OpenAI call)..."
   resp=$(curl -s -X POST -H "$AUTH" "$BASE_URL/api/ai/connectivity")

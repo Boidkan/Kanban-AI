@@ -1,10 +1,10 @@
 import os
 import secrets
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from pydantic import BaseModel, ValidationError, model_validator
+from pydantic import BaseModel, StringConstraints, ValidationError, model_validator
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 
 from backend.ai import (
@@ -13,6 +13,7 @@ from backend.ai import (
     call_openai_chat,
     call_openai_structured_board_response,
 )
+from backend.auth import hash_password, verify_password
 from backend.db import (
     DEFAULT_DB_PATH,
     BoardNotFoundError,
@@ -20,16 +21,13 @@ from backend.db import (
     UserNotFoundError,
     create_user_with_board,
     get_board_for_user,
+    get_user_auth,
     initialize_database,
     update_board_for_user,
+    username_exists,
 )
 
 DEFAULT_FRONTEND_DIR = Path("/app/frontend-out")
-
-# MVP credentials. The user table supports multiple users, but only this
-# account can authenticate for now (see docs/PLAN.md).
-AUTH_USERNAME = "user"
-AUTH_PASSWORD = "password"
 
 
 class CardModel(BaseModel):
@@ -88,6 +86,19 @@ class BoardUpdateRequestModel(BaseModel):
 class LoginRequestModel(BaseModel):
     username: str
     password: str
+
+
+class RegisterRequestModel(BaseModel):
+    username: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=3,
+            max_length=32,
+            pattern=r"^[A-Za-z0-9_-]+$",
+        ),
+    ]
+    password: Annotated[str, StringConstraints(min_length=8)]
 
 
 class LoginResponseModel(BaseModel):
@@ -166,9 +177,24 @@ def create_app(
 
     @app.post("/api/auth/login", response_model=LoginResponseModel)
     def login(payload: LoginRequestModel) -> LoginResponseModel:
-        if payload.username != AUTH_USERNAME or payload.password != AUTH_PASSWORD:
+        auth = get_user_auth(db_path=db_path, username=payload.username)
+        # Single generic failure for both unknown user and wrong password.
+        if auth is None or not verify_password(payload.password, auth[1] or ""):
             raise HTTPException(status_code=401, detail="Invalid credentials.")
-        create_user_with_board(db_path=db_path, username=payload.username)
+        token = secrets.token_urlsafe(32)
+        sessions[token] = payload.username
+        return LoginResponseModel(token=token, username=payload.username)
+
+    @app.post("/api/auth/register", response_model=LoginResponseModel)
+    def register(payload: RegisterRequestModel) -> LoginResponseModel:
+        if username_exists(db_path=db_path, username=payload.username):
+            raise HTTPException(status_code=409, detail="Username is already taken.")
+        create_user_with_board(
+            db_path=db_path,
+            username=payload.username,
+            password_hash=hash_password(payload.password),
+        )
+        # Log the new account straight in.
         token = secrets.token_urlsafe(32)
         sessions[token] = payload.username
         return LoginResponseModel(token=token, username=payload.username)
