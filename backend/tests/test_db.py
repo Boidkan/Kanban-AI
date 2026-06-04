@@ -1,8 +1,11 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from backend.db import (
     BoardNotFoundError,
+    BoardVersionConflictError,
     create_user_with_board,
     deserialize_board,
     get_board_for_user,
@@ -96,6 +99,27 @@ def test_repository_create_read_update_board(tmp_path: Path) -> None:
     assert next_version == 2
     assert reloaded_version == 2
     assert reloaded["columns"][0]["title"] == "Updated"
+
+
+def test_update_board_raises_on_version_conflict(tmp_path: Path) -> None:
+    db_path = tmp_path / "data" / "app.db"
+    board = {
+        "columns": [{"id": "col-a", "title": "A", "cardIds": ["card-1"]}],
+        "cards": {"card-1": {"id": "card-1", "title": "Task", "details": "Detail"}},
+    }
+    create_user_with_board(db_path=db_path, username="alice", board=board)
+
+    # Board is at version 1; an update expecting a different version conflicts.
+    with pytest.raises(BoardVersionConflictError):
+        update_board_for_user(
+            db_path=db_path, username="alice", board=board, expected_version=99
+        )
+
+    # Matching version succeeds and advances to 2.
+    next_version = update_board_for_user(
+        db_path=db_path, username="alice", board=board, expected_version=1
+    )
+    assert next_version == 2
 
 
 def test_repository_raises_for_missing_board_state(tmp_path: Path) -> None:

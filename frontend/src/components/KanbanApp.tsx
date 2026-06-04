@@ -2,44 +2,43 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
-
-const AUTH_STORAGE_KEY = "pm-authenticated";
-const DUMMY_USERNAME = "user";
-const DUMMY_PASSWORD = "password";
+import { getToken, login, logout } from "@/lib/api";
 
 export const KanbanApp = () => {
   const [isReady, setIsReady] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(AUTH_STORAGE_KEY);
-    setIsAuthenticated(saved === "true");
+    setIsAuthenticated(Boolean(getToken()));
     setIsReady(true);
   }, []);
 
-  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setIsSubmitting(true);
+    setError("");
 
-    if (username === DUMMY_USERNAME && password === DUMMY_PASSWORD) {
+    try {
+      await login(username, password);
       setIsAuthenticated(true);
-      setError("");
       setPassword("");
-      window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
-      return;
+    } catch {
+      setError("Invalid credentials. Use user / password.");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setError("Invalid credentials. Use user / password.");
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logout();
     setIsAuthenticated(false);
     setUsername("");
     setPassword("");
     setError("");
-    window.localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
   if (!isReady) {
@@ -92,9 +91,10 @@ export const KanbanApp = () => {
 
             <button
               type="submit"
-              className="w-full rounded-full bg-[var(--secondary-purple)] px-4 py-3 text-sm font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
+              disabled={isSubmitting}
+              className="w-full rounded-full bg-[var(--secondary-purple)] px-4 py-3 text-sm font-semibold uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Sign in
+              {isSubmitting ? "Signing in..." : "Sign in"}
             </button>
           </form>
         </section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -13,8 +13,10 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { createId, fallbackBoard, moveCard, type BoardData } from "@/lib/kanban";
 import { chatWithAI, fetchBoard, saveBoard, type AIConversationMessage } from "@/lib/api";
+
+const RENAME_SAVE_DEBOUNCE_MS = 400;
 
 type KanbanBoardProps = {
   onLogout?: () => void;
@@ -30,7 +32,11 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<AIConversationMessage[]>([]);
-  const username = "user";
+
+  // The board version is used for optimistic-concurrency checks on save; it is
+  // kept in a ref so async/debounced saves always read the latest value.
+  const versionRef = useRef(0);
+  const renameSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -45,13 +51,15 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await fetchBoard(username);
+        const response = await fetchBoard();
         if (isMounted) {
           setBoard(response.board);
+          versionRef.current = response.version;
         }
       } catch (loadError) {
         if (isMounted) {
-          setBoard(initialData);
+          setBoard(fallbackBoard);
+          versionRef.current = 0;
           setError(loadError instanceof Error ? loadError.message : "Failed to load board.");
         }
       } finally {
@@ -64,6 +72,9 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     void loadBoard();
     return () => {
       isMounted = false;
+      if (renameSaveTimer.current) {
+        clearTimeout(renameSaveTimer.current);
+      }
     };
   }, []);
 
@@ -73,9 +84,19 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     setIsSaving(true);
     setError(null);
     try {
-      await saveBoard(username, nextBoard);
+      const response = await saveBoard(nextBoard, versionRef.current);
+      versionRef.current = response.version;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to save changes.");
+      // Resync from the source of truth so the UI never diverges from the
+      // persisted board (handles save failures and version conflicts).
+      try {
+        const fresh = await fetchBoard();
+        setBoard(fresh.board);
+        versionRef.current = fresh.version;
+      } catch {
+        // Leave the local board in place if the server is unreachable.
+      }
     } finally {
       setIsSaving(false);
     }
@@ -86,6 +107,18 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     void persistBoard(nextBoard);
   };
 
+  // Column rename fires on every keystroke; update the UI immediately but
+  // debounce the persist so typing a title is a single save, not one per key.
+  const scheduleBoardSave = (nextBoard: BoardData) => {
+    setBoard(nextBoard);
+    if (renameSaveTimer.current) {
+      clearTimeout(renameSaveTimer.current);
+    }
+    renameSaveTimer.current = setTimeout(() => {
+      void persistBoard(nextBoard);
+    }, RENAME_SAVE_DEBOUNCE_MS);
+  };
+
   const handleAIChatSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const question = chatInput.trim();
@@ -93,20 +126,20 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
       return;
     }
 
-    const nextConversation: AIConversationMessage[] = [
-      ...messages,
-      { role: "user", content: question },
-    ];
-    setMessages(nextConversation);
+    // Send the prior conversation plus the question separately; the backend
+    // adds the question to the prompt, so including it here too would duplicate it.
+    const priorConversation = messages;
+    setMessages([...messages, { role: "user", content: question }]);
     setChatInput("");
     setAIError(null);
     setIsAIThinking(true);
 
     try {
-      const response = await chatWithAI(username, question, nextConversation);
+      const response = await chatWithAI(question, priorConversation);
       setMessages((prev) => [...prev, { role: "assistant", content: response.message }]);
       if (response.board_updated) {
         setBoard(response.board);
+        versionRef.current = response.version;
       }
     } catch (chatError) {
       setAIError(chatError instanceof Error ? chatError.message : "AI request failed.");
@@ -154,7 +187,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
         column.id === columnId ? { ...column, title } : column
       ),
     };
-    commitBoard(nextBoard);
+    scheduleBoardSave(nextBoard);
   };
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
@@ -286,7 +319,9 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
                 <KanbanColumn
                   key={column.id}
                   column={column}
-                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  cards={column.cardIds
+                    .map((cardId) => board.cards[cardId])
+                    .filter((card): card is NonNullable<typeof card> => Boolean(card))}
                   onRename={handleRenameColumn}
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}

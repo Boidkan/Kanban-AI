@@ -39,6 +39,10 @@ class BoardNotFoundError(Exception):
     pass
 
 
+class BoardVersionConflictError(Exception):
+    pass
+
+
 def is_legacy_example_board(board: dict[str, Any]) -> bool:
     cards = board.get("cards")
     if not isinstance(cards, dict):
@@ -202,8 +206,6 @@ def get_board_for_user(
     db_path: Path = DEFAULT_DB_PATH,
     username: str = "user",
 ) -> tuple[dict[str, Any], int]:
-    initialize_database(db_path=db_path)
-
     with sqlite3.connect(db_path) as conn:
         user_row = conn.execute(
             "SELECT id FROM users WHERE username = ?",
@@ -226,9 +228,8 @@ def update_board_for_user(
     board: dict[str, Any],
     db_path: Path = DEFAULT_DB_PATH,
     username: str = "user",
+    expected_version: int | None = None,
 ) -> int:
-    initialize_database(db_path=db_path)
-
     with sqlite3.connect(db_path) as conn:
         user_row = conn.execute(
             "SELECT id FROM users WHERE username = ?",
@@ -244,7 +245,14 @@ def update_board_for_user(
         if board_row is None:
             raise BoardNotFoundError(f"No board exists for user '{username}'.")
 
-        next_version = int(board_row[0]) + 1
+        current_version = int(board_row[0])
+        if expected_version is not None and current_version != expected_version:
+            raise BoardVersionConflictError(
+                f"Board for user '{username}' is at version {current_version}, "
+                f"but update expected version {expected_version}."
+            )
+
+        next_version = current_version + 1
         conn.execute(
             """
             UPDATE boards

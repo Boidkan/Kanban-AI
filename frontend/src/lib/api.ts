@@ -19,9 +19,38 @@ type AIChatResponse = {
   board_updated: boolean;
 };
 
+type LoginResponse = {
+  token: string;
+  username: string;
+};
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const TOKEN_STORAGE_KEY = "pm-auth-token";
 
 const createUrl = (path: string) => `${API_BASE_URL}${path}`;
+
+export const getToken = (): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+};
+
+const setToken = (token: string | null) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (token) {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  } else {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  }
+};
+
+const authHeaders = (): Record<string, string> => {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const parseErrorMessage = async (response: Response) => {
   try {
@@ -32,10 +61,43 @@ const parseErrorMessage = async (response: Response) => {
   }
 };
 
-export const fetchBoard = async (username: string): Promise<BoardResponse> => {
-  const response = await fetch(createUrl(`/api/board/${username}`), {
+export const login = async (
+  username: string,
+  password: string
+): Promise<LoginResponse> => {
+  const response = await fetch(createUrl("/api/auth/login"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  const payload = (await response.json()) as LoginResponse;
+  setToken(payload.token);
+  return payload;
+};
+
+export const logout = async (): Promise<void> => {
+  try {
+    await fetch(createUrl("/api/auth/logout"), {
+      method: "POST",
+      headers: authHeaders(),
+    });
+  } finally {
+    setToken(null);
+  }
+};
+
+export const fetchBoard = async (): Promise<BoardResponse> => {
+  const response = await fetch(createUrl("/api/board"), {
     method: "GET",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...authHeaders() },
   });
 
   if (!response.ok) {
@@ -46,16 +108,17 @@ export const fetchBoard = async (username: string): Promise<BoardResponse> => {
 };
 
 export const saveBoard = async (
-  username: string,
-  board: BoardData
+  board: BoardData,
+  expectedVersion?: number
 ): Promise<BoardResponse> => {
-  const response = await fetch(createUrl(`/api/board/${username}`), {
+  const response = await fetch(createUrl("/api/board"), {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
+      ...authHeaders(),
     },
-    body: JSON.stringify({ board }),
+    body: JSON.stringify({ board, expected_version: expectedVersion ?? null }),
   });
 
   if (!response.ok) {
@@ -66,15 +129,15 @@ export const saveBoard = async (
 };
 
 export const chatWithAI = async (
-  username: string,
   question: string,
   conversation: AIConversationMessage[]
 ): Promise<AIChatResponse> => {
-  const response = await fetch(createUrl(`/api/ai/board/${username}`), {
+  const response = await fetch(createUrl("/api/ai/board"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
+      ...authHeaders(),
     },
     body: JSON.stringify({ question, conversation }),
   });

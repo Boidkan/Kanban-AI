@@ -1,7 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { initialData } from "@/lib/kanban";
+import { fallbackBoard } from "@/lib/kanban";
 import { chatWithAI, fetchBoard, saveBoard } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -18,20 +18,21 @@ const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 
 describe("KanbanBoard", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mockedFetchBoard.mockResolvedValue({
       username: "user",
       version: 1,
-      board: initialData,
+      board: fallbackBoard,
     });
     mockedSaveBoard.mockResolvedValue({
       username: "user",
       version: 2,
-      board: initialData,
+      board: fallbackBoard,
     });
     mockedChatWithAI.mockResolvedValue({
       model: "gpt-4o-mini",
       message: "No changes needed.",
-      board: initialData,
+      board: fallbackBoard,
       version: 1,
       board_updated: false,
     });
@@ -42,7 +43,7 @@ describe("KanbanBoard", () => {
     expect(await screen.findAllByTestId(/column-/i)).toHaveLength(5);
   });
 
-  it("renames a column", async () => {
+  it("renames a column and saves (debounced)", async () => {
     render(<KanbanBoard />);
     await screen.findAllByTestId(/column-/i);
     const column = getFirstColumn();
@@ -50,7 +51,7 @@ describe("KanbanBoard", () => {
     await userEvent.clear(input);
     await userEvent.type(input, "New Name");
     expect(input).toHaveValue("New Name");
-    expect(mockedSaveBoard).toHaveBeenCalled();
+    await waitFor(() => expect(mockedSaveBoard).toHaveBeenCalled());
   });
 
   it("adds and removes a card", async () => {
@@ -77,7 +78,7 @@ describe("KanbanBoard", () => {
     await userEvent.click(deleteButton);
 
     expect(within(column).queryByText("New card")).not.toBeInTheDocument();
-    expect(mockedSaveBoard).toHaveBeenCalled();
+    await waitFor(() => expect(mockedSaveBoard).toHaveBeenCalled());
   });
 
   it("shows load error and keeps board usable", async () => {
@@ -90,8 +91,8 @@ describe("KanbanBoard", () => {
 
   it("renders chat response and applies AI board update", async () => {
     const updatedBoard = {
-      ...initialData,
-      columns: initialData.columns.map((column, index) =>
+      ...fallbackBoard,
+      columns: fallbackBoard.columns.map((column, index) =>
         index === 0 ? { ...column, title: "AI Updated Column" } : column
       ),
     };

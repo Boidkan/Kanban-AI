@@ -38,7 +38,23 @@ const setupBoardApiMock = async (page: Page) => {
   let board = cloneBoard(initialBoard);
   let version = 1;
 
-  await page.route("**/api/board/user", async (route) => {
+  await page.route("**/api/auth/login", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ token: "e2e-token", username: "user" }),
+    });
+  });
+
+  await page.route("**/api/auth/logout", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "ok" }),
+    });
+  });
+
+  await page.route("**/api/board", async (route) => {
     const method = route.request().method();
     if (method === "GET") {
       await route.fulfill({
@@ -64,7 +80,7 @@ const setupBoardApiMock = async (page: Page) => {
     await route.fallback();
   });
 
-  await page.route("**/api/ai/board/user", async (route) => {
+  await page.route("**/api/ai/board", async (route) => {
     const payload = route.request().postDataJSON() as {
       question: string;
       conversation: { role: "user" | "assistant"; content: string }[];

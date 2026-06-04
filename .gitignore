@@ -60,6 +60,12 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# SQLite runtime database (created/seeded at runtime; never commit)
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+
 # Flask stuff:
 instance/
 .webassets-cache

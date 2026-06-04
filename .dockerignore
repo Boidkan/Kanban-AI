@@ -1,0 +1,13 @@
+# Keep the build context small and avoid baking dev/runtime state into the image.
+.git
+.gitignore
+.venv
+**/node_modules
+**/.next
+**/out
+.pytest_cache
+**/__pycache__
+# Runtime SQLite database (the container initializes its own clean copy)
+backend/data
+# Local env / secrets (compose injects env at runtime)
+.env
