@@ -1,4 +1,4 @@
-# Project Management MVP
+# Kanban-AI MVP
 
 This repository contains a full-stack Project Management MVP with a Kanban board and an AI assistant sidebar. This projext was vibe coded and unverified for production.
 
