@@ -2,6 +2,8 @@
 
 This repository contains a full-stack Project Management MVP with a Kanban board and an AI assistant sidebar. This projext was vibe coded and unverified for production.
 
+![The app in action: sign in, manage a Kanban board, and ask the AI assistant to move a card](docs/demo.gif)
+
 It is designed to run locally in Docker, with:
 
 - a **Next.js frontend** (UI)
